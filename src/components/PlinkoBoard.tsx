@@ -182,7 +182,7 @@ export const PlinkoBoard: React.FC<PlinkoBoardProps> = ({
         }
       }
     }
-  }, [pegMap]);
+  }, [pegMap, isDungeon, isDebug]);
 
 
   const drawBins = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number, activeBin: number | null) => {
@@ -190,7 +190,7 @@ export const PlinkoBoard: React.FC<PlinkoBoardProps> = ({
     const centerX = width / 2;
     const y = height * 0.9;
     const binWidth = spacing * 0.9;
-    const binHeight = 30;
+    const binHeight = 35;
 
     for (let i = 0; i < 13; i++) {
       const x = centerX + (i - 6) * spacing;
