@@ -1,42 +1,31 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { NextResponse } from "next/server";
+import { RoundRepository } from "@/lib/storage";
 
-interface RouteParams {
-  params: Promise<{ id: string }>;
-}
-
-export async function POST(req: NextRequest, { params }: RouteParams) {
+export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
     const { id } = await params;
-
-    const round = await db.round.findUnique({
-      where: { id },
-    });
+    const round = await RoundRepository.getById(id);
 
     if (!round) {
-      return NextResponse.json({ error: 'Round not found' }, { status: 404 });
+      return NextResponse.json({ error: "Round not found" }, { status: 404 });
     }
 
-    if (round.status === 'CREATED') {
-      return NextResponse.json({ error: 'Round has not been started yet' }, { status: 400 });
+    if (round.status !== "STARTED") {
+      return NextResponse.json({ error: "Round not in revealable state" }, { status: 400 });
     }
 
-    const updatedRound = await db.round.update({
-      where: { id },
-      data: {
-        status: 'REVEALED',
-        revealedAt: new Date(),
-      },
+    const updatedRound = await RoundRepository.update(id, {
+      status: "REVEALED",
+      revealedAt: new Date(),
     });
 
     return NextResponse.json({
-      serverSeed: updatedRound.serverSeed,
-      combinedSeed: updatedRound.combinedSeed,
-      commitHex: updatedRound.commitHex,
+      serverSeed: round.serverSeed,
+      payoutMultiplier: round.payoutMultiplier,
+      resultAmount: (round.betCents * round.payoutMultiplier) / 100,
     });
-
-  } catch (error) {
-    console.error('[REVEAL_ERROR]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  } catch (error: any) {
+    console.error("[REVEAL_ERROR]", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -1,6 +1,13 @@
 import crypto from 'crypto';
 
 /**
+ * Generates a random 64-char hex server seed
+ */
+export function generateServerSeed(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+/**
  * SHA256 helper using Node.js crypto
  */
 export function sha256(input: string): string {

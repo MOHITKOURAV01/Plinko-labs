@@ -1,36 +1,19 @@
-import { NextResponse } from 'next/server';
-import crypto from 'crypto';
-import { db } from '@/lib/db';
-import { sha256 } from '@/lib/engine';
+import { NextResponse } from "next/server";
+import { v4 as uuidv4 } from "uuid";
+import { generateServerSeed, sha256 } from "@/lib/engine";
+import { RoundRepository } from "@/lib/storage";
 
 export async function POST() {
   try {
-    // Generate random 64-char hex serverSeed (32 bytes)
-    const serverSeed = crypto.randomBytes(32).toString('hex');
+    const serverSeed = generateServerSeed();
+    const nonce = uuidv4().slice(0, 8);
+    const commitHex = sha256(serverSeed + ":" + nonce);
 
-    // Generate random 4-digit nonce
-    const nonce = crypto.randomInt(1000, 9999).toString();
-
-    // Compute commitHex
-    const commitHex = sha256(`${serverSeed}:${nonce}`);
-
-    // Save Round with status=CREATED
-    const round = await db.round.create({
-      data: {
-        serverSeed,
-        nonce,
-        commitHex,
-        status: 'CREATED',
-        clientSeed: '',
-        combinedSeed: '',
-        pegMapHash: '',
-        rows: 12,
-        dropColumn: 0,
-        binIndex: 0,
-        payoutMultiplier: 1.0,
-        betCents: 100,
-        pathJson: JSON.stringify([]),
-      },
+    const round = await RoundRepository.create({
+      status: "CREATED",
+      nonce,
+      commitHex,
+      serverSeed, // Stored safely for later reveal
     });
 
     return NextResponse.json({
@@ -38,8 +21,7 @@ export async function POST() {
       commitHex: round.commitHex,
       nonce: round.nonce,
     }, { status: 201 });
-
-  } catch (error) {
+  } catch (error: any) {
     console.error('[COMMIT_ERROR]', error);
     return NextResponse.json({ error: 'Failed to create round commitment' }, { status: 500 });
   }
