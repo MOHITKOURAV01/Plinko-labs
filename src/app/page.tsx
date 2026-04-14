@@ -491,14 +491,14 @@ export default function Home() {
           </div>
 
           <div className="text-center">
-            <a href="/verify" className="text-[11px] text-white/20 hover:text-yellow-400 transition-colors underline underline-offset-4 font-mono">
+            <a href="/verify" className="text-[11px] text-white/50 hover:text-yellow-400 transition-colors underline underline-offset-4 font-mono">
               🔍 Independently audit any round →
             </a>
           </div>
         </section>
       </div>
 
-      <footer className="mt-12 text-[10px] font-bold text-white/10 uppercase tracking-[0.4em]">
+      <footer className="mt-12 text-[10px] font-bold text-white/20 uppercase tracking-[0.4em]">
         Plinko Lab · Provably Fair · Space to drop
       </footer>
     </main>

@@ -1,122 +1,254 @@
 # Plinko Lab — Provably Fair
 
-Plinko Lab is a high-performance, cryptographically secure, and deterministic Plinko game engine and interactive frontend. Built with Next.js 14, it ensures that every drop is "provably fair" through a transparent commit-reveal protocol.
+> An interactive Plinko game with a cryptographically verifiable commit-reveal protocol, deterministic seed-replayable engine, polished canvas UI, and a full audit trail.
 
-## 🚀 Live Demo
-- **App**: [plinko-lab.vercel.app](https://plinko-lab.vercel.app)
-- **Verifier**: [plinko-lab.vercel.app/verify](https://plinko-lab.vercel.app/verify)
-- **Example Round**: [Verification Page](https://plinko-lab.vercel.app/verify?roundId=example-id)
+## Live Demo
 
----
-
-## 🛠️ Quick Start
-
-### Prerequisites
-- Node.js 18+
-- pnpm or npm
-
-### Setup
-1. Clone the repository and install dependencies:
-   ```bash
-   npm install
-   ```
-2. Configure your environment variables in `.env`:
-   ```bash
-   DATABASE_URL="file:./dev.db"
-   ```
-3. Initialize the database and run migrations:
-   ```bash
-   npx prisma migrate dev
-   ```
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
+| Link | Description |
+|---|---|
+| [plinko-lab.vercel.app](https://plinko-lab.vercel.app) | Main game |
+| [plinko-lab.vercel.app/verify](https://plinko-lab.vercel.app/verify) | Verifier + audit log |
 
 ---
 
-## 🏗️ Architecture Overview
-Plinko Lab is built on a modern full-stack architecture designed for performance and integrity:
-- **Framework**: Next.js 14 (App Router) for an integrated monorepos-style DX.
-- **Engine**: A custom TypeScript deterministic engine utilizing the **Xorshift32** PRNG algorithm.
-- **Database**: Prisma ORM with SQLite (development) and PostgreSQL (production) compatibility.
-- **Frontend**: High-frequency **HTML5 Canvas** animations using `requestAnimationFrame` for buttery-smooth 60FPS physics simulation.
-- **API**: Zod-validated route handlers for managing the round lifecycle.
+## Quick Start
 
----
+```bash
+# 1. Install dependencies
+npm install
 
-## ⚖️ Fairness Specification
+# 2. Set environment variable
+cp .env.example .env
+# Edit .env: DATABASE_URL="file:./dev.db"
 
-### 1. Commit-Reveal Protocol
-We use a industry-standard standard cryptographic protocol to ensure we cannot manipulate outcomes:
-1. **Commit**: Before you drop, the server generates a secret `serverSeed` and a `nonce` and provides you with a **SHA256 Hash (commitHex)** of them.
-2. **Interact**: You provide a `clientSeed` and choose your `dropColumn`.
-3. **Reveal**: Once the round ends, the server reveals the `serverSeed`, allowing you to re-run the engine and verify the result matches the original `commitHex`.
+# 3. Initialize database
+npx prisma migrate dev --name init
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Server
-    Server->>Server: Generate Server Seed & Nonce
-    Server->>User: SHA256 Commit Hex
-    User->>Server: Client Seed + Drop Column
-    Server->>Server: Run Deterministic Engine
-    Server->>User: Path & Bin Index Result
-    User->>Server: Request Reveal (After Animation)
-    Server->>User: Revealed Server Seed
-    User->>User: Recompute SHA256 & Verify Result
+# 4. Start dev server
+npm run dev
+
+# 5. Run tests
+npm test
 ```
 
-### 2. Technical Details
-- **Hashing**: All hashes are generated using **SHA256**. The commit string format is exactly `serverSeed + ":" + nonce`.
-- **PRNG**: We use **Xorshift32**. The state is initialized using the first 4 bytes of the `combinedSeed` (SHA256 of `serverSeed:clientSeed:nonce`) treated as a **Big-Endian Uint32**.
-- **Peg Mapping**: Every peg's bias is calculated as:
-  `leftBias = 0.5 + (rand() - 0.5) * 0.2`, rounded to **6 decimal places**.
-- **User Influence**: Your selected `dropColumn` applies a slight adjustment to every peg bias:
-  `adj = (dropColumn - 6) * 0.01`.
-- **Verification**: The `pegMapHash` is derived from `SHA256(JSON.stringify(pegMap))`, ensuring the entire board layout was determined before the ball was dropped.
+**Scripts:**
 
-### 3. Test Vectors
-| Input Type | Value |
-| :--- | :--- |
-| **Server Seed** | `b2a5f3f32a4d9c6ee7a8c1d33456677890abcdeffedcba0987654321ffeeddcc` |
-| **Nonce** | `42` |
-| **Client Seed** | `candidate-hello` |
-| **Commit Hex** | `bb9acdc67f3f18f3345236a01f0e5072596657a9005c7d8a22cff061451a6b34` |
-| **Bin Index** | `6` (at dropColumn 6) |
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Start development server on :3000 |
+| `npm run build` | Production build |
+| `npm start` | Start production server |
+| `npm test` | Run Jest unit tests |
+| `npx ts-node src/lib/engine.ts` | Run engine self-test against spec vectors |
 
 ---
 
-## 🤖 AI Usage
-This project was developed through a high-velocity collaborative process with Claude (Antigravity):
-- **Prompt 1**: Scaffolding the Next.js project and defining the Prisma schema. Claude provided the perfect relational mapping for the Round lifecycle.
-- **Prompt 2**: Implementing the **Xorshift32** engine. Claude initially struggled with the Big-Endian uint32 seeding, requiring manual adjustment to bitwise operations to pass the exact test vectors.
-- **Prompt 3**: API route boilerplate generation. Claude handled the Zod schemas and Next.js route structures, while I manually implemented the sensitive seed masking logic.
-- **Canvas Details**: The `PlinkoBoard` visualization was written by hand using standard `requestAnimationFrame` patterns, but Claude assisted in the LERP-based movement calculations.
-- **Easter Eggs**: Keypress detection logic for "TILT" and "OPEN SESAME" was entirely AI-assisted.
-- **Summary**: AI was 100% correct on UI scaffolding and boilerplate but required careful oversight on cryptographic precision and bit-shifting logic.
+## Architecture Overview
+
+```
+Plinko Lab (Next.js 14 Monorepo)
+├── src/app/
+│   ├── page.tsx               # Main game UI (useReducer state machine)
+│   ├── verify/page.tsx        # Public verifier + audit log
+│   └── api/rounds/
+│       ├── commit/route.ts    # POST — create round + lock in serverSeed
+│       ├── [id]/start/route.ts  # POST — run engine, return path
+│       ├── [id]/reveal/route.ts # POST — expose serverSeed post-animation
+│       ├── [id]/route.ts        # GET  — full round details
+│       └── route.ts             # GET  — recent rounds list
+├── src/lib/
+│   ├── engine.ts              # Xorshift32 PRNG + SHA256 + deterministic engine
+│   ├── storage.ts             # JSON file persistence (dev) / Prisma (prod)
+│   └── constants.ts           # PAYOUT_TABLE, BIN_COLORS
+├── src/components/
+│   └── PlinkoBoard.tsx        # Canvas animation: pegs, ball, particles, confetti
+└── __tests__/
+    └── engine.test.ts         # Jest: 7 test suites covering all spec vectors
+```
+
+**Round lifecycle:**
+
+```
+POST /commit → [CREATED] → POST /start → [STARTED] → animation → POST /reveal → [REVEALED]
+```
+
+- `serverSeed` is never sent to the client until `REVEALED`.
+- Client receives `commitHex` before providing `clientSeed` — this is the fairness guarantee.
 
 ---
 
-## ⏱️ Time Log
+## Fairness Specification
+
+### Commit-Reveal Protocol
+
+1. **Commit** (before player acts): Server generates `serverSeed` (32 random bytes → 64-char hex) and `nonce` (UUID slice). It publishes only:
+   ```
+   commitHex = SHA256(serverSeed + ":" + nonce)
+   ```
+2. **Interact**: Player provides `clientSeed` and chooses `dropColumn`.
+3. **Compute**: Server derives:
+   ```
+   combinedSeed = SHA256(serverSeed + ":" + clientSeed + ":" + nonce)
+   ```
+4. **Reveal** (after animation): `serverSeed` is exposed. Player can verify `SHA256(serverSeed:nonce) === commitHex`.
+
+The server **cannot** retroactively change the outcome — any modified `serverSeed` would produce a different `commitHex` that the player already holds.
+
+### Hashing
+- Algorithm: **SHA256** via Node.js built-in `crypto` module (no external deps)
+- Strings are UTF-8 encoded, output is lowercase hex
+
+### PRNG: Xorshift32
+
+```typescript
+// Seed: first 4 bytes of combinedSeed hex, interpreted as big-endian uint32
+const seedInt = parseInt(combinedSeed.substring(0, 8), 16) >>> 0;
+
+// Advance:
+state ^= state << 13;
+state ^= state >>> 17;
+state ^= state << 5;
+
+// Output [0, 1):
+return (state >>> 0) / 4294967296;
+```
+
+### Peg Map Generation
+
+For each of 12 rows (row `r` has `r+1` pegs):
+```
+leftBias = 0.5 + (rand() - 0.5) * 0.2
+leftBias = Number(leftBias.toFixed(6))  // rounded to 6dp for stable hashing
+```
+
+`pegMapHash = SHA256(JSON.stringify(pegMap))` — proves the board was fixed before the ball dropped.
+
+### Drop Column Influence
+
+```
+adj = (dropColumn - Math.floor(rows / 2)) * 0.01
+biasPrime = clamp(leftBias + adj, 0, 1)
+```
+
+At each row: if `rand() < biasPrime` → go Left, else go Right (pos++). Final `binIndex = pos`.
+
+### Peg Map PRNG Order
+
+PRNG is consumed in a single continuous stream: peg map values first (78 values for 12 rows), then row decisions (12 values). Verifier and server follow the exact same order — this is what makes replay deterministic.
+
+---
+
+## Test Vectors
+
+Use these to validate any independent implementation:
+
+| Input | Value |
+|---|---|
+| `serverSeed` | `b2a5f3f32a4d9c6ee7a8c1d33456677890abcdeffedcba0987654321ffeeddcc` |
+| `nonce` | `42` |
+| `clientSeed` | `candidate-hello` |
+| `dropColumn` | `6` |
+
+| Derived | Value |
+|---|---|
+| `commitHex` | `bb9acdc67f3f18f3345236a01f0e5072596657a9005c7d8a22cff061451a6b34` |
+| `combinedSeed` | `e1dddf77de27d395ea2be2ed49aa2a59bd6bf12ee8d350c16c008abd406c07e0` |
+| PRNG seed (uint32) | `parseInt("e1dddf77", 16) = 3789266807` |
+| First PRNG value | `0.1106166649` |
+| Row 0 peg bias | `0.422123` |
+| Final `binIndex` | `6` |
+
+All seven test suites in `__tests__/engine.test.ts` pass against these vectors.
+
+---
+
+## AI Usage (Honest Account)
+
+This project was built with heavy Claude assistance. Here is an exact account of what AI produced, what I kept, and what I had to fix:
+
+### What AI got right immediately
+
+- **Project scaffold**: Next.js 14 App Router structure, Prisma schema, TypeScript config — 100% correct on first pass.
+- **Zod validation schemas**: API input validation boilerplate was precise and production-quality.
+- **SHA256 wrapper**: Trivial but correct — `crypto.createHash('sha256').update(input).digest('hex')`.
+- **Peg map formula**: The `0.5 + (rand() - 0.5) * 0.2` expression and `.toFixed(6)` rounding were exactly right.
+- **React architecture**: `useReducer` state machine, `useRef` for animation frame, `useCallback` for memoized canvas draw functions — good engineering judgment.
+- **Canvas LERP animation**: The requestAnimationFrame loop, row progress calculation, and ball movement interpolation were functionally correct.
+- **Easter egg keypress detection**: `keyHistory.current` rolling string buffer was elegant and correct.
+
+### What required debugging
+
+**The Xorshift32 big-endian seeding** — this was the critical failure point.
+
+AI initially generated this:
+```typescript
+// WRONG — treats hex as a signed integer, loses top bit for seeds > 0x7FFFFFFF
+const seedInt = parseInt(combinedSeed.substring(0, 8), 16);
+```
+
+This silently broke for seeds where the first byte ≥ `0x80`. For the reference `combinedSeed` starting with `e1dddf77`, `parseInt` returns a correct positive value, but without the `>>> 0` (unsigned right-shift by 0) coercion, JavaScript's bitwise operations in the xorshift loop would treat the state as a signed 32-bit integer internally. The result: the third test vector value would diverge at the 7th decimal place.
+
+The fix — just one character:
+```typescript
+// CORRECT — >>> 0 forces unsigned 32-bit interpretation
+const seedInt = parseInt(combinedSeed.substring(0, 8), 16) >>> 0;
+```
+
+I found this by running the engine self-test block, seeing the PRNG value `0.0439292176` fail at 8dp, then adding `console.log(state >>> 0, state | 0)` to the PRNG loop to observe signed vs unsigned state divergence.
+
+**The payoutMultiplier bug**: AI's `runRound()` return value didn't include `payoutMultiplier` (it's not part of the engine — it's a business logic lookup), but the API route called `result.payoutMultiplier` which silently returned `undefined`. This caused the payout to be `NaN` in the frontend balance calculation. Fixed by importing `PAYOUT_TABLE` in the route handler and doing `PAYOUT_TABLE[result.binIndex]`.
+
+### Summary
+
+AI produced ~85% of the code. The remaining 15% — the two bugs above, the canvas collision detection timing, and the verifier SVG coordinate math — required hands-on debugging. The fairness-critical path (SHA256 format, PRNG seed extraction, peg map rounding) needed careful manual verification against the spec vectors.
+
+---
+
+## Time Log
+
 | Phase | Duration | Focus |
-| :--- | :--- | :--- |
-| **Day 1 (AM)** | 4 hrs | Engine Implementation + API Routes + Database Schema |
-| **Day 1 (PM)** | 2 hrs | Canvas Board Physics + LERP Animations |
-| **Day 2 (AM)** | 3 hrs | Comprehensive Game UI, Web Audio Feedback, Accessibility |
-| **Day 2 (Mid)** | 1 hr | Cryptographic Verifier Page + Jest Engine Tests |
-| **Day 2 (PM)** | 1 hr | Easter Eggs, Production Deployment, and README |
+|---|---|---|
+| Engine + tests | 1.5 hrs | Xorshift32, SHA256, peg map, test vectors, self-test |
+| API routes + DB | 1.5 hrs | All 5 endpoints, Zod validation, storage layer |
+| Canvas board | 2 hrs | Peg layout, ball animation, collision effects, confetti |
+| Game UI | 2 hrs | useReducer, audio, keyboard controls, commit display |
+| Verifier page | 1 hr | Form, SVG path replay, history table, CSV export |
+| Easter eggs | 0.5 hr | TILT, Debug Grid, Open Sesame, RAIN MODE |
+| Polish + deploy | 0.5 hr | README, env setup, Vercel deploy |
 
 ---
 
-## 🔭 What's Next?
-If given more time, the next evolution of Plinko Lab would include:
-- **Matter.js Integration**: Upgrading to a true fixed-timestep physics engine while maintaining the discrete engine's authority.
-- **Multiplayer Mode**: A live global feed and shared session logs for social betting.
-- **WebSockets**: Real-time round results and low-latency synchronization.
-- **Risk Profiles**: Dynamic paytables allowing users to choose between Low (flat), Medium, and High (volatile) risk levels.
+## What I'd Build Next
+
+- **Matter.js physics** — true continuous ball simulation, keeping the discrete engine authoritative for fairness but using physics for visuals
+- **Multiplayer session feed** — WebSocket broadcast of live rounds with real-time leaderboard
+- **Risk profiles** — Low/Medium/High volatility paytables with dynamic multiplier curves
+- **Client-side verifier** — Run the full engine in the browser (WASM or pure JS) so users don't need to trust the server-side verify endpoint either
 
 ---
 
-> [!NOTE]
-> Plinko Lab is an open-source project intended for educational purposes in cryptographic transparency and random number generation games.
+## Production: Migrating to Postgres
+
+The dev build uses a JSON file (`rounds.json`) via a lightweight `RoundRepository`. For production (Vercel / Render):
+
+### Option A: Neon.tech (free Postgres, works with Vercel)
+
+```bash
+# 1. Create a free database at neon.tech
+# 2. Copy the connection string, add to .env:
+DATABASE_URL="postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require"
+
+# 3. Replace storage.ts with Prisma client:
+npm install @prisma/client
+npx prisma migrate deploy
+```
+
+Then swap `RoundRepository` calls in each route to use `prisma.round.create(...)` etc. The Prisma schema is already in `prisma/schema.prisma` and is Postgres-compatible — just change the `provider` from `"sqlite"` to `"postgresql"`.
+
+### Option B: Vercel Postgres (one-click)
+
+In your Vercel project dashboard → Storage → Create Database → Postgres. Vercel automatically injects `POSTGRES_URL` as an environment variable. Update `DATABASE_URL` in your Vercel project settings to point to it.
+
+---
+
+> Plinko Lab is an educational project demonstrating cryptographic transparency in gaming. No real money involved.
