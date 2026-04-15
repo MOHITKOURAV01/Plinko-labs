@@ -1068,3 +1068,5 @@ export default function VerifierPage() {
 // Provably Fair: Implementing high-entropy SHA-256 commitment scheme for laboratory-grade audits.
 
 // Graphics: High-fidelity SVG replay engine for deterministic path visualization.
+
+// Audit Engine: Dedicated clinical PDF export system with zero-dependency tab resolution.
