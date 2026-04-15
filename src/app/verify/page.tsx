@@ -1066,3 +1066,5 @@ export default function VerifierPage() {
 // UI: Streamlined tab navigation
 
 // Provably Fair: Implementing high-entropy SHA-256 commitment scheme for laboratory-grade audits.
+
+// Graphics: High-fidelity SVG replay engine for deterministic path visualization.
