@@ -276,3 +276,8 @@ The platform supports Clinical PDF and High-Fidelity CSV exports for laboratory-
 
 - Clinical PDF: Dedicated high-contrast audit logs.
 - Lab CSV: Full session metadata for transparency.
+
+### Physics Engine
+
+- Type: High-fidelity canvas gravity simulator.
+- Resolution: Deterministic pathing based on combined seed entropy.
