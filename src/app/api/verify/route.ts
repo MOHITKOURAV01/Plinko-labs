@@ -8,18 +8,22 @@ export async function GET(req: NextRequest) {
     const clientSeed = searchParams.get('clientSeed');
     const nonce = searchParams.get('nonce');
     const dropColumnStr = searchParams.get('dropColumn');
+    const rowsStr = searchParams.get('rows');
+    const risk = searchParams.get('risk') || 'MEDIUM';
 
     if (!serverSeed || !clientSeed || !nonce || !dropColumnStr) {
       return NextResponse.json({ error: 'Missing required query parameters' }, { status: 400 });
     }
 
     const dropColumn = parseInt(dropColumnStr, 10);
+    const rows = rowsStr ? parseInt(rowsStr, 10) : 12;
+
     if (isNaN(dropColumn)) {
       return NextResponse.json({ error: 'Invalid dropColumn' }, { status: 400 });
     }
 
     // Deterministic re-run
-    const results = runRound(serverSeed, clientSeed, nonce, dropColumn);
+    const results = runRound(serverSeed, clientSeed, nonce, dropColumn, rows, risk);
     const { commitHex: expectedCommit } = generateCommit(serverSeed, nonce);
 
     return NextResponse.json({
