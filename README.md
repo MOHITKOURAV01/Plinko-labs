@@ -271,3 +271,8 @@ The platform supports Clinical PDF and High-Fidelity CSV exports for laboratory-
 
 - Server Seed: Pre-committed and hashed using SHA-256.
 - Client Seed: High-entropy user-defined or random string.
+
+### Audit Features
+
+- Clinical PDF: Dedicated high-contrast audit logs.
+- Lab CSV: Full session metadata for transparency.
