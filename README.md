@@ -266,3 +266,8 @@ Each round uses a SHA-256 commitment scheme. The Server Seed is hashed before th
 The platform supports Clinical PDF and High-Fidelity CSV exports for laboratory-grade transparency and third-party auditing.
 
 // Final Release Manifest
+
+### Provably Fair Protocol
+
+- Server Seed: Pre-committed and hashed using SHA-256.
+- Client Seed: High-entropy user-defined or random string.
