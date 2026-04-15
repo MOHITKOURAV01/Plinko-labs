@@ -252,3 +252,17 @@ In your Vercel project dashboard → Storage → Create Database → Postgres. V
 ---
 
 > Plinko Lab is an educational project demonstrating cryptographic transparency in gaming. No real money involved.
+
+## Technical Architecture
+
+The Plinko Lab Pro is built on a high-fidelity physics simulator integrated into a provably fair React application. The system uses a dedicated canvas gravity engine for deterministic ball-path resolution.
+
+## Provably Fair Logic
+
+Each round uses a SHA-256 commitment scheme. The Server Seed is hashed before the round, and after reveal, the user can verify the deterministic peg map generation.
+
+## High-Fidelity Audits
+
+The platform supports Clinical PDF and High-Fidelity CSV exports for laboratory-grade transparency and third-party auditing.
+
+// Final Release Manifest
