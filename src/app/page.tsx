@@ -474,13 +474,13 @@ export default function Home() {
              <div className="absolute top-6 right-6 flex flex-col gap-2 z-50 pointer-events-none">
                  {state.recentWins.slice(0, 3).map((win, i) => (
                     <div key={`${win.id}-${i}`} className="px-4 py-2 rounded-xl flex items-center gap-4 animate-appear shadow-2xl border border-white/5" style={{ background: '#1A1A1A' }}>
-                        <span className={`text-sm font-black ${win.isWin ? "text-[#00E701]" : "text-[#B1BAD3]"}`}>
+                        <span className={`text-sm font-black ${win.isWin ? "text-[#00E701]" : "text-[#f43f5e]"}`}>
                             {win.isWin ? "+" : "-"}${win.amount.toFixed(2)}
                         </span>
                         <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black btn-glossy ${win.isWin ? 'text-black' : 'text-white'}`} 
                               style={{ 
-                                background: win.isWin ? '#00E701' : '#3F5563',
-                                '--glossy-top': win.isWin ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)'
+                                background: win.isWin ? '#00E701' : '#f43f5e',
+                                '--glossy-top': win.isWin ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)'
                               } as any}>
                             {win.multiplier}x
                         </span>

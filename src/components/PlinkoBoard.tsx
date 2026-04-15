@@ -52,6 +52,7 @@ export const PlinkoBoard: React.FC<PlinkoBoardProps> = ({
   onAnimationComplete,
   onPegHit,
   reducedMotion = false,
+  dropColumn,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -325,7 +326,7 @@ export const PlinkoBoard: React.FC<PlinkoBoardProps> = ({
     });
 
     animationRef.current = requestAnimationFrame(tick);
-  }, [dimensions, rows, risk, activeBalls, onAnimationComplete, onPegHit, drawBoard, drawBins, drawBall, reducedMotion]);
+  }, [dimensions, rows, risk, activeBalls, onAnimationComplete, onPegHit, drawBoard, drawBins, drawBall, reducedMotion, dropColumn]);
 
   useEffect(() => {
     // Continuous engine loop

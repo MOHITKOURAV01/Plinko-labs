@@ -289,6 +289,11 @@ export default function VerifierPage() {
   const [loading, setLoading] = useState(false);
   const [specLoaded, setSpecLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState("verify");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const fetchRecent = useCallback(async () => {
     try {
@@ -982,13 +987,17 @@ export default function VerifierPage() {
                           <span className="group-hover:text-white transition-colors">{r.id.slice(0, 12)}...</span>
                         </td>
                         <td className="px-6 py-4 text-[11px] text-[#557086]">
-                          {new Date(r.createdAt).toLocaleTimeString()}
+                          {mounted ? new Date(r.createdAt).toLocaleTimeString() : "..."}
                         </td>
                         <td className="px-6 py-4 font-mono text-[11px] text-[#B1BAD3] truncate max-w-[120px]">
                           {r.clientSeed}
                         </td>
                         <td className="px-6 py-4">
-                          <span className="px-2.5 py-1 rounded-lg text-[10px] font-black btn-glossy text-black" style={{ background: getBinColors(13)[r.binIndex] || '#00E701' }}>
+                          <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black btn-glossy ${r.payoutMultiplier >= 1 ? 'text-black' : 'text-white'}`} 
+                                style={{ 
+                                  background: r.payoutMultiplier >= 1 ? '#00E701' : '#f43f5e',
+                                  '--glossy-top': r.payoutMultiplier >= 1 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.15)'
+                                } as any}>
                             {r.payoutMultiplier}x
                           </span>
                         </td>
