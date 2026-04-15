@@ -124,3 +124,5 @@ export function runRound(serverSeed: string, clientSeed: string, nonce: string, 
 // If you need to test the engine, use a dedicated script or test runner.
 
 // DX: Laboratory metadata annotation
+
+// Laboratory-grade metadata tracking for provable fairness audit trails.
