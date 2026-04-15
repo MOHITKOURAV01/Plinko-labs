@@ -21,6 +21,7 @@ model Round {
   combinedSeed     String    @default("")
   pegMapHash       String    @default("")
   rows             Int       @default(12)
+  risk             String    @default("MEDIUM")
   dropColumn       Int       @default(6)
   binIndex         Int       @default(0)
   payoutMultiplier Float     @default(1.0)
