@@ -20,6 +20,7 @@ interface PlinkoBoardProps {
   onAnimationComplete: (id: string, binIndex: number) => void;
   onPegHit?: () => void;
   reducedMotion?: boolean;
+  dropColumn: number;
 }
 
 const ROW_DURATION = 120; // ms per row drop
@@ -132,7 +133,15 @@ export const PlinkoBoard: React.FC<PlinkoBoardProps> = ({
       const isActive = activeBins.includes(i);
 
       ctx.save();
-      if (isActive) ctx.translate(0, 3);
+      if (isActive) {
+        ctx.translate(0, 3);
+        // Celebration Shimmer
+        const shimmerGrad = ctx.createRadialGradient(x, y + 10, 0, x, y + 10, 40);
+        shimmerGrad.addColorStop(0, 'rgba(255,255,255,0.4)');
+        shimmerGrad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = shimmerGrad;
+        ctx.fillRect(x - 50, y - 50, 100, 100);
+      }
 
       // 3D Bin Body with Bevel
       const binGrad = ctx.createLinearGradient(x, y, x, y + binHeight);
@@ -217,6 +226,23 @@ export const PlinkoBoard: React.FC<PlinkoBoardProps> = ({
     // In Reduced Motion, we jump to end instantly, so activeBalls shouldn't even be drawn, 
     // but the engine will prune them immediately if they are completed.
     
+    // Draw Drop Indicator
+    const dropSpacing = dimensions.width / (rows + 2);
+    const dropX = dimensions.width / 2 + (dropColumn - rows / 2) * dropSpacing;
+    const dropY = dimensions.height * 0.05;
+    
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(dropX - 10, dropY);
+    ctx.lineTo(dropX + 10, dropY);
+    ctx.lineTo(dropX, dropY + 15);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(0, 231, 1, 0.4)';
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = '#00E701';
+    ctx.fill();
+    ctx.restore();
+
     // Draw Base
     drawBoard(ctx, dimensions.width, dimensions.height, rows);
     

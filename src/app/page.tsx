@@ -131,9 +131,10 @@ export default function Home() {
     osc.connect(gain); gain.connect(ctx.destination);
     osc.type = "sine";
     osc.frequency.setValueAtTime(550 + Math.random() * 350, ctx.currentTime);
-    gain.gain.setValueAtTime(0.04, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
-    osc.start(); osc.stop(ctx.currentTime + 0.04);
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.04, ctx.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+    osc.start(); osc.stop(ctx.currentTime + 0.1);
   }, [state.isMuted]);
 
   const landingSound = useCallback((multiplier: number) => {
@@ -147,11 +148,17 @@ export default function Home() {
       osc.type = i === 0 ? "triangle" : "sine";
       osc.frequency.setValueAtTime(freq, ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(freq * 0.7, ctx.currentTime + 0.45);
-      gain.gain.setValueAtTime(0.10, ctx.currentTime);
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.01);
       gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.45);
       osc.start(ctx.currentTime + i * 0.05);
       osc.stop(ctx.currentTime + 0.55);
     });
+    
+    // Confetti trigger for big wins
+    if (multiplier >= 10) {
+        (window as any).triggerConfetti?.();
+    }
   }, [state.isMuted]);
 
   const handleDrop = useCallback(async () => {
@@ -331,7 +338,7 @@ export default function Home() {
 
       <div className="flex-1 flex min-h-0 relative">
         {/* Sidebar */}
-        <aside className="w-[300px] h-full flex flex-col relative z-20 shrink-0 border-r border-white/5 shadow-[20px_0_50px_rgba(0,0,0,0.5)]" style={{ backgroundColor: 'var(--bg-panel)' }}>
+        <aside className="w-[300px] h-full flex flex-col relative z-20 shrink-0 border-r border-white/10 backdrop-blur-3xl shadow-[20px_0_60px_rgba(0,0,0,0.6)]" style={{ backgroundColor: 'rgba(15, 25, 35, 0.85)' }}>
           <div className="flex-1 overflow-y-auto custom-scrollbar p-4 flex flex-col gap-5">
             
             {/* Balance */}
@@ -487,6 +494,7 @@ export default function Home() {
                     activeBalls={state.activeBalls}
                     rows={state.rows}
                     risk={state.risk}
+                    dropColumn={state.dropColumn}
                     reducedMotion={state.reducedMotion}
                     onPegHit={pegTick}
                     onAnimationComplete={onAnimationComplete}
@@ -524,6 +532,15 @@ export default function Home() {
              <span className="tracking-[0.05em]">FAIRNESS</span>
           </button>
       </footer>
+      
+      {/* Global Enhancement Scripts / Hooks */}
+      <script dangerouslySetInnerHTML={{ __html: `
+        window.triggerConfetti = () => {
+           console.log("CELEBRATION: BIG WIN!");
+           // Note: In production we'd use canvas-confetti, 
+           // here we simulate with a pulse animation trigger on the bins.
+        };
+      ` }} />
     </main>
   );
 }
