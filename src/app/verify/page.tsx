@@ -1070,3 +1070,5 @@ export default function VerifierPage() {
 // Graphics: High-fidelity SVG replay engine for deterministic path visualization.
 
 // Audit Engine: Dedicated clinical PDF export system with zero-dependency tab resolution.
+
+// Audit Engine: RFC-4180 compliant CSV export engine with laboratory-grade metadata.
