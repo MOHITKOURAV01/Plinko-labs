@@ -10,6 +10,7 @@ export interface ActiveBall {
   dropColumn: number;
   binIndex: number;
   startTime: number;
+  isGolden?: boolean;
 }
 
 interface PlinkoBoardProps {
@@ -165,7 +166,7 @@ export const PlinkoBoard: React.FC<PlinkoBoardProps> = ({
     }
   }, []);
 
-  const drawBall = useCallback((ctx: CanvasRenderingContext2D, x: number, y: number) => {
+  const drawBall = useCallback((ctx: CanvasRenderingContext2D, x: number, y: number, isGolden: boolean = false) => {
     ctx.save();
     
     // Ball Shadow
@@ -176,9 +177,17 @@ export const PlinkoBoard: React.FC<PlinkoBoardProps> = ({
 
     // 3D Sphere Gradient
     const ballGrad = ctx.createRadialGradient(x - 2, y - 2, 1, x, y, BALL_RADIUS);
-    ballGrad.addColorStop(0, '#FFFFFF'); // Highlight
-    ballGrad.addColorStop(0.3, '#F3F4F6');
-    ballGrad.addColorStop(1, '#9CA3AF'); // Shadow
+    if (isGolden) {
+        ballGrad.addColorStop(0, '#FFD700'); // Gold Highlight
+        ballGrad.addColorStop(0.5, '#DAA520'); // Golden Rod
+        ballGrad.addColorStop(1, '#8B4513'); // Saddle Brown shadow
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = '#FFD700';
+    } else {
+        ballGrad.addColorStop(0, '#FFFFFF'); // Highlight
+        ballGrad.addColorStop(0.3, '#F3F4F6');
+        ballGrad.addColorStop(1, '#9CA3AF'); // Shadow
+    }
 
     ctx.beginPath();
     ctx.arc(x, y, BALL_RADIUS, 0, Math.PI * 2);
@@ -188,7 +197,7 @@ export const PlinkoBoard: React.FC<PlinkoBoardProps> = ({
     // Reflection Spot
     ctx.beginPath();
     ctx.arc(x - 2.5, y - 2.5, 2, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fillStyle = isGolden ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.4)';
     ctx.fill();
 
     ctx.restore();
@@ -241,6 +250,16 @@ export const PlinkoBoard: React.FC<PlinkoBoardProps> = ({
         const ballX = currentX + (nextX - currentX) * rowProgress;
         const ballY = currentY + (nextY - currentY) * rowProgress;
 
+        // Trail for Golden Ball
+        if (ball.isGolden) {
+           ctx.beginPath();
+           ctx.moveTo(currentX, currentY);
+           ctx.lineTo(ballX, ballY);
+           ctx.strokeStyle = 'rgba(218, 165, 32, 0.4)';
+           ctx.lineWidth = 4;
+           ctx.stroke();
+        }
+
         // Collision logic
         if (rowProgress < 0.2 && currentRow >= 0) {
           const key = `hit-${ball.id}-${currentRow}`;
@@ -255,13 +274,13 @@ export const PlinkoBoard: React.FC<PlinkoBoardProps> = ({
           }
         }
 
-        drawBall(ctx, ballX, ballY);
+        drawBall(ctx, ballX, ballY, ball.isGolden);
       } else {
         hitBins.push(ball.binIndex);
         const spacing = dimensions.width / (rows + 2);
         const finalX = dimensions.width / 2 + (ball.binIndex - rows/2) * spacing;
         const finalY = dimensions.height * 0.92 - 10;
-        drawBall(ctx, finalX, finalY);
+        drawBall(ctx, finalX, finalY, ball.isGolden);
       }
     });
 

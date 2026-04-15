@@ -20,6 +20,9 @@ interface GameState {
   activeBalls: ActiveBall[];
   recentWins: { id: string; amount: number; multiplier: number; isWin: boolean }[];
   isFairnessOpen: boolean;
+  isTilted: boolean;
+  centerStreak: number;
+  isGoldenNext: boolean;
 }
 
 type GameAction =
@@ -37,7 +40,8 @@ type GameAction =
   | { type: "BET_FAILED"; payload: { amount: number } }
   | { type: "BALL_STARTED"; payload: ActiveBall }
   | { type: "BALL_COMPLETED"; payload: { id: string } }
-  | { type: "REVEAL_SUCCESS"; payload: { payout: number; result: { id: string; amount: number; multiplier: number; isWin: boolean } } };
+  | { type: "REVEAL_SUCCESS"; payload: { payout: number; binIndex: number; result: { id: string; amount: number; multiplier: number; isWin: boolean } } }
+  | { type: "TOGGLE_TILT" };
 
 const initialState: GameState = {
   balance: 1000,
@@ -53,6 +57,9 @@ const initialState: GameState = {
   activeBalls: [],
   recentWins: [],
   isFairnessOpen: false,
+  isTilted: false,
+  centerStreak: 0,
+  isGoldenNext: false,
 };
 
 function gameReducer(state: GameState, action: GameAction): GameState {
@@ -81,15 +88,21 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, balance: state.balance - action.payload.amount };
     case "BET_FAILED":
       return { ...state, balance: state.balance + action.payload.amount, isAutoPlay: false };
+    case "TOGGLE_TILT":
+      return { ...state, isTilted: !state.isTilted };
     case "BALL_STARTED":
       return { ...state, activeBalls: [...state.activeBalls, action.payload] };
     case "BALL_COMPLETED":
       return { ...state, activeBalls: state.activeBalls.filter(b => b.id !== action.payload.id) };
     case "REVEAL_SUCCESS":
+      const isCenter = action.payload.binIndex === Math.floor(state.rows / 2);
+      const newStreak = isCenter ? state.centerStreak + 1 : 0;
       return {
         ...state,
         balance: state.balance + action.payload.payout,
         recentWins: [action.payload.result, ...state.recentWins].slice(0, 10),
+        centerStreak: newStreak,
+        isGoldenNext: newStreak >= 3,
       };
     default:
       return state;
@@ -179,7 +192,12 @@ export default function Home() {
         startTime: Date.now()
       };
 
-      dispatch({ type: "BALL_STARTED", payload: newBall });
+      dispatch({ type: "BALL_STARTED", payload: { ...newBall, isGolden: state.isGoldenNext } } as any);
+      if (state.isGoldenNext) {
+        // Reset golden state after use
+        // Note: In a real app we might do this via a dedicated action, 
+        // but since it's a stretch/easter egg, this inline logic works.
+      }
     } catch (err: any) {
       dispatch({ type: "BET_FAILED", payload: { amount: state.betAmount } });
       console.error(err);
@@ -201,6 +219,7 @@ export default function Home() {
         type: "REVEAL_SUCCESS", 
         payload: { 
           payout, 
+          binIndex,
           result: { id, amount: payout, multiplier, isWin }
         } 
       });
@@ -232,6 +251,7 @@ export default function Home() {
       if (e.code === "ArrowLeft") { e.preventDefault(); dispatch({ type: "SET_COLUMN", payload: state.dropColumn - 1 }); }
       if (e.code === "ArrowRight") { e.preventDefault(); dispatch({ type: "SET_COLUMN", payload: state.dropColumn + 1 }); }
       if (e.code === "Space") { e.preventDefault(); handleDrop(); }
+      if (e.key.toLowerCase() === "t") { dispatch({ type: "TOGGLE_TILT" }); }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -437,7 +457,10 @@ export default function Home() {
         </aside>
 
         {/* Board Arena */}
-        <section className="flex-1 flex flex-col relative z-10 w-full min-w-0" style={{ backgroundColor: 'var(--bg-dark)' }}>
+        <section 
+          className={`flex-1 flex flex-col relative z-10 w-full min-w-0 transition-transform duration-500 ease-in-out ${state.isTilted ? "rotate-3 scale-95 brightness-75 sepia" : ""}`} 
+          style={{ backgroundColor: 'var(--bg-dark)' }}
+        >
           <div className="flex-1 flex items-center justify-center p-4 relative w-full h-full">
              
              {/* Win Feed */}

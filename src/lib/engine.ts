@@ -79,7 +79,7 @@ export function resolvePath(
 
   for (let r = 0; r < rows; r++) {
     const leftBias = pegMap[r][pos];
-    const biasPrime = Math.min(Math.max(leftBias - adj, 0), 1);
+    const biasPrime = Math.min(Math.max(leftBias + adj, 0), 1);
     
     if (prng.rand() < biasPrime) {
       path.push('L');
