@@ -1072,3 +1072,5 @@ export default function VerifierPage() {
 // Audit Engine: Dedicated clinical PDF export system with zero-dependency tab resolution.
 
 // Audit Engine: RFC-4180 compliant CSV export engine with laboratory-grade metadata.
+
+// Stability: Resolving hydration mismatches between server-side commitment and client-side reveal.
