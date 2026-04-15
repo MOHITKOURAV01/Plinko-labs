@@ -1,68 +1,58 @@
 "use client";
 
-import { useReducer, useMemo, useRef, useCallback, useEffect, useState } from "react";
+import { useReducer, useRef, useCallback, useEffect } from "react";
 import PlinkoBoard from "@/components/PlinkoBoard";
-import { PAYOUT_TABLE, BIN_COLORS } from "@/lib/constants";
 
-type GameStatus = "IDLE" | "COMMITTING" | "STARTING" | "DROPPING" | "REVEALING";
+
+import type { ActiveBall } from "@/components/PlinkoBoard";
 
 interface GameState {
   balance: number;
   betAmount: number;
   dropColumn: number;
+  rows: number;
+  risk: 'LOW' | 'MEDIUM' | 'HIGH';
   clientSeed: string;
   isMuted: boolean;
   reducedMotion: boolean;
-  isTilt: boolean;
-  isDebug: boolean;
-  isDungeon: boolean;
-  isRainMode: boolean;
-  status: GameStatus;
-  currentRound: {
-    id: string;
-    commitHex: string;
-    nonce: string;
-    path: ("L" | "R")[];
-    binIndex: number;
-    payoutMultiplier: number;
-    pegMap: number[][];
-  } | null;
-  recentBins: number[];
-  lastResult: { amount: number; multiplier: number; isWin: boolean } | null;
+  isAutoPlay: boolean;
+  autoBetsLeft: number;
+  activeBalls: ActiveBall[];
+  recentWins: { id: string; amount: number; multiplier: number; isWin: boolean }[];
+  isFairnessOpen: boolean;
 }
 
 type GameAction =
   | { type: "SET_BET"; payload: number }
   | { type: "SET_COLUMN"; payload: number }
+  | { type: "SET_ROWS"; payload: number }
+  | { type: "SET_RISK"; payload: 'LOW' | 'MEDIUM' | 'HIGH' }
   | { type: "SET_CLIENT_SEED"; payload: string }
+  | { type: "SET_AUTO_PLAY"; payload: { isAuto: boolean; count: number } }
+  | { type: "DECREMENT_AUTO_BET" }
   | { type: "TOGGLE_MUTE" }
   | { type: "TOGGLE_REDUCED_MOTION" }
-  | { type: "TOGGLE_TILT" }
-  | { type: "TOGGLE_DEBUG" }
-  | { type: "TOGGLE_DUNGEON" }
-  | { type: "TOGGLE_RAIN" }
-  | { type: "START_COMMIT" }
-  | { type: "COMMIT_SUCCESS"; payload: { id: string; commitHex: string; nonce: string } }
-  | { type: "START_ROUND"; payload: { path: ("L" | "R")[]; binIndex: number; payoutMultiplier: number; pegMap: number[][] } }
-  | { type: "DROP_COMPLETE" }
-  | { type: "REVEAL_SUCCESS"; payload: { balance: number; result: { amount: number; multiplier: number; isWin: boolean } } }
-  | { type: "ERROR" };
+  | { type: "TOGGLE_FAIRNESS" }
+  | { type: "BET_PLACED"; payload: { amount: number } }
+  | { type: "BET_FAILED"; payload: { amount: number } }
+  | { type: "BALL_STARTED"; payload: ActiveBall }
+  | { type: "BALL_COMPLETED"; payload: { id: string } }
+  | { type: "REVEAL_SUCCESS"; payload: { payout: number; result: { id: string; amount: number; multiplier: number; isWin: boolean } } };
 
 const initialState: GameState = {
   balance: 1000,
   betAmount: 10,
   dropColumn: 6,
+  rows: 12,
+  risk: 'MEDIUM',
   clientSeed: "plinko-lab-v1",
   isMuted: false,
   reducedMotion: false,
-  isTilt: false,
-  isDebug: false,
-  isDungeon: false,
-  isRainMode: false,
-  status: "IDLE",
-  currentRound: null,
-  recentBins: [],
-  lastResult: null,
+  isAutoPlay: false,
+  autoBetsLeft: 0,
+  activeBalls: [],
+  recentWins: [],
+  isFairnessOpen: false,
 };
 
 function gameReducer(state: GameState, action: GameAction): GameState {
@@ -70,144 +60,48 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case "SET_BET":
       return { ...state, betAmount: Math.min(Math.max(1, action.payload), state.balance) };
     case "SET_COLUMN":
-      return { ...state, dropColumn: Math.min(Math.max(0, action.payload), 12) };
+      return { ...state, dropColumn: Math.min(Math.max(0, action.payload), state.rows) };
+    case "SET_ROWS":
+      return { ...state, rows: action.payload, dropColumn: Math.floor(action.payload / 2) };
+    case "SET_RISK":
+      return { ...state, risk: action.payload };
     case "SET_CLIENT_SEED":
       return { ...state, clientSeed: action.payload };
-    case "TOGGLE_MUTE":       return { ...state, isMuted: !state.isMuted };
-    case "TOGGLE_REDUCED_MOTION": return { ...state, reducedMotion: !state.reducedMotion };
-    case "TOGGLE_TILT":       return { ...state, isTilt: !state.isTilt };
-    case "TOGGLE_DEBUG":      return { ...state, isDebug: !state.isDebug };
-    case "TOGGLE_DUNGEON":    return { ...state, isDungeon: !state.isDungeon };
-    case "TOGGLE_RAIN":       return { ...state, isRainMode: !state.isRainMode };
-    case "START_COMMIT":
-      return { ...state, status: "COMMITTING", lastResult: null };
-    case "COMMIT_SUCCESS":
-      return {
-        ...state, status: "STARTING",
-        currentRound: { ...action.payload, path: [], binIndex: 0, payoutMultiplier: 1, pegMap: [] },
-      };
-    case "START_ROUND":
-      return {
-        ...state, status: "DROPPING",
-        balance: state.balance - state.betAmount,
-        currentRound: state.currentRound ? { ...state.currentRound, ...action.payload } : null,
-      };
-    case "DROP_COMPLETE":
-      return { ...state, status: "REVEALING" };
+    case "SET_AUTO_PLAY":
+      return { ...state, isAutoPlay: action.payload.isAuto, autoBetsLeft: action.payload.count };
+    case "DECREMENT_AUTO_BET":
+      return { ...state, autoBetsLeft: Math.max(0, state.autoBetsLeft - 1), isAutoPlay: state.autoBetsLeft - 1 > 0 };
+    case "TOGGLE_MUTE":       
+      return { ...state, isMuted: !state.isMuted };
+    case "TOGGLE_REDUCED_MOTION": 
+      return { ...state, reducedMotion: !state.reducedMotion };
+    case "TOGGLE_FAIRNESS":
+      return { ...state, isFairnessOpen: !state.isFairnessOpen };
+    case "BET_PLACED":
+      return { ...state, balance: state.balance - action.payload.amount };
+    case "BET_FAILED":
+      return { ...state, balance: state.balance + action.payload.amount, isAutoPlay: false };
+    case "BALL_STARTED":
+      return { ...state, activeBalls: [...state.activeBalls, action.payload] };
+    case "BALL_COMPLETED":
+      return { ...state, activeBalls: state.activeBalls.filter(b => b.id !== action.payload.id) };
     case "REVEAL_SUCCESS":
       return {
-        ...state, status: "IDLE",
-        balance: action.payload.balance,
-        lastResult: action.payload.result,
-        recentBins: [state.currentRound!.binIndex, ...state.recentBins].slice(0, 5),
+        ...state,
+        balance: state.balance + action.payload.payout,
+        recentWins: [action.payload.result, ...state.recentWins].slice(0, 10),
       };
-    case "ERROR":
-      return { ...state, status: "IDLE" };
     default:
       return state;
   }
 }
 
-// Commit tooltip — shows what the hash means, lets user copy it
-function CommitTooltip({ commitHex }: { commitHex: string }) {
-  const [show, setShow] = useState(false);
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="relative">
-      <div className="flex items-center gap-2">
-        <span className="text-[9px] font-mono text-white/30 truncate flex-1">
-          🔒 {commitHex.slice(0, 18)}…
-        </span>
-        <button
-          onMouseEnter={() => setShow(true)}
-          onMouseLeave={() => setShow(false)}
-          onClick={() => { navigator.clipboard.writeText(commitHex); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-          className="text-[9px] text-white/30 hover:text-yellow-400 transition-colors px-1.5 py-0.5 rounded border border-white/10 hover:border-yellow-400/30 shrink-0"
-        >
-          {copied ? "✓" : "copy"}
-        </button>
-        <button
-          onMouseEnter={() => setShow(true)}
-          onMouseLeave={() => setShow(false)}
-          className="text-[10px] text-white/20 hover:text-yellow-400 transition-colors shrink-0"
-          aria-label="What is this commit hash?"
-        >?</button>
-      </div>
-      {show && (
-        <div className="absolute bottom-full left-0 mb-2 z-[200] bg-[#141414] border border-yellow-500/30 rounded-xl p-4 w-80 shadow-2xl pointer-events-none">
-          <p className="text-[10px] font-bold text-yellow-400 mb-2 uppercase tracking-widest">What is this?</p>
-          <p className="text-[11px] text-white/60 leading-relaxed mb-2">
-            Before you play, the server locked in its secret seed by publishing this <strong className="text-white/80">SHA256 hash</strong>. It cannot be changed retroactively. After the round, compare this hash with the revealed seed to confirm you were never cheated.
-          </p>
-          <p className="text-[9px] text-white/20 font-mono break-all">{commitHex}</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Rain mode — golden coins falling from the sky
-function RainOverlay() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    type Coin = { x: number; y: number; vy: number; size: number; alpha: number; rot: number; rotV: number };
-    const coins: Coin[] = Array.from({ length: 55 }, () => ({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height - canvas.height,
-      vy: 1.5 + Math.random() * 3,
-      size: 8 + Math.random() * 14,
-      alpha: 0.4 + Math.random() * 0.5,
-      rot: Math.random() * Math.PI * 2,
-      rotV: (Math.random() - 0.5) * 0.12,
-    }));
-    let raf: number;
-    const draw = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      for (const c of coins) {
-        ctx.save();
-        ctx.globalAlpha = c.alpha;
-        ctx.translate(c.x, c.y);
-        ctx.rotate(c.rot);
-        ctx.beginPath();
-        ctx.ellipse(0, 0, c.size, c.size * 0.38, 0, 0, Math.PI * 2);
-        ctx.fillStyle = "#facc15";
-        ctx.fill();
-        ctx.strokeStyle = "#a16207";
-        ctx.lineWidth = 0.8;
-        ctx.stroke();
-        ctx.fillStyle = "#78350f";
-        ctx.font = `bold ${Math.round(c.size * 0.55)}px monospace`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("$", 0, 0);
-        ctx.restore();
-        c.y += c.vy;
-        c.rot += c.rotV;
-        if (c.y > canvas.height + 30) { c.y = -30; c.x = Math.random() * canvas.width; }
-      }
-      raf = requestAnimationFrame(draw);
-    };
-    draw();
-    return () => cancelAnimationFrame(raf);
-  }, []);
-  return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-50" />;
-}
 
 export default function Home() {
   const [state, dispatch] = useReducer(gameReducer, initialState);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const payoutTable = useMemo(() => PAYOUT_TABLE, []);
-  const binColors = useMemo(() => BIN_COLORS, []);
 
-  const lastBins = useRef<number[]>([]);
-  const keyHistory = useRef<string>("");
-  const isGoldenNext = useRef<boolean>(false);
+
+
   const audioCtx = useRef<AudioContext | null>(null);
 
   const initAudio = () => {
@@ -248,258 +142,364 @@ export default function Home() {
   }, [state.isMuted]);
 
   const handleDrop = useCallback(async () => {
-    if (state.status !== "IDLE") return;
+    if (state.balance < state.betAmount) {
+      if (state.isAutoPlay) dispatch({ type: "SET_AUTO_PLAY", payload: { isAuto: false, count: 0 } });
+      return;
+    }
+    
     initAudio();
-    setErrorMsg(null);
-    dispatch({ type: "START_COMMIT" });
+    // Optimistic extraction
+    dispatch({ type: "BET_PLACED", payload: { amount: state.betAmount } });
+
     try {
       const commitRes = await fetch("/api/rounds/commit", { method: "POST" });
       const commitData = await commitRes.json();
-      if (!commitRes.ok) throw new Error(commitData.error || "Commit failed");
-
-      dispatch({ type: "COMMIT_SUCCESS", payload: { id: commitData.roundId, commitHex: commitData.commitHex, nonce: commitData.nonce } });
+      if (!commitRes.ok) throw new Error("Commit failed");
 
       const startRes = await fetch(`/api/rounds/${commitData.roundId}/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientSeed: state.clientSeed, betCents: state.betAmount * 100, dropColumn: state.dropColumn }),
+        body: JSON.stringify({ 
+           clientSeed: state.clientSeed, 
+           betCents: state.betAmount * 100, 
+           dropColumn: state.dropColumn,
+           rows: state.rows,
+           risk: state.risk
+        }),
       });
       const startData = await startRes.json();
-      if (!startRes.ok) throw new Error(startData.error || "Start failed");
+      if (!startRes.ok) throw new Error("Start failed");
+      
+      const newBall: ActiveBall = {
+        id: startData.roundId,
+        path: startData.path,
+        pegMap: startData.pegMap,
+        dropColumn: state.dropColumn,
+        binIndex: startData.binIndex,
+        startTime: Date.now()
+      };
 
-      dispatch({ type: "START_ROUND", payload: { path: startData.path, binIndex: startData.binIndex, payoutMultiplier: startData.payoutMultiplier, pegMap: startData.pegMap } });
+      dispatch({ type: "BALL_STARTED", payload: newBall });
     } catch (err: any) {
-      setErrorMsg(err.message || "Something went wrong. Is the server running?");
-      dispatch({ type: "ERROR" });
+      dispatch({ type: "BET_FAILED", payload: { amount: state.betAmount } });
+      console.error(err);
     }
-  }, [state.status, state.clientSeed, state.betAmount, state.dropColumn]);
+  }, [state.balance, state.betAmount, state.clientSeed, state.dropColumn, state.rows, state.risk, state.isAutoPlay]);
 
-  const onAnimationComplete = useCallback(async () => {
-    if (state.status !== "DROPPING") return;
-    dispatch({ type: "DROP_COMPLETE" });
+  const onAnimationComplete = useCallback(async (id: string, binIndex: number) => {
+    dispatch({ type: "BALL_COMPLETED", payload: { id } });
     try {
-      await fetch(`/api/rounds/${state.currentRound?.id}/reveal`, { method: "POST" });
-      const multiplier = state.currentRound!.payoutMultiplier;
-      const payout = state.betAmount * multiplier;
+      const res = await fetch(`/api/rounds/${id}/reveal`, { method: "POST" });
+      const revealData = await res.json();
+      
+      const multiplier = revealData.payoutMultiplier ?? 1;
+      const payout = revealData.resultAmount ?? 0;
       const isWin = multiplier >= 1;
+      
       landingSound(multiplier);
-      dispatch({ type: "REVEAL_SUCCESS", payload: { balance: state.balance + payout, result: { amount: payout, multiplier, isWin } } });
-      lastBins.current = [state.currentRound!.binIndex, ...lastBins.current].slice(0, 3);
-      isGoldenNext.current = lastBins.current.length === 3 && lastBins.current.every((b) => b === 6);
-      if (state.isDungeon) dispatch({ type: "TOGGLE_DUNGEON" });
+      dispatch({ 
+        type: "REVEAL_SUCCESS", 
+        payload: { 
+          payout, 
+          result: { id, amount: payout, multiplier, isWin }
+        } 
+      });
     } catch (err) { console.error(err); }
-  }, [state.status, state.currentRound, state.betAmount, state.balance, landingSound, state.isDungeon]);
+  }, [landingSound]);
+
+  // Hook for AutoPlay
+  useEffect(() => {
+    if (!state.isAutoPlay || state.autoBetsLeft <= 0) return;
+    
+    // Check balance first to prevent starting interval 
+    if (state.balance < state.betAmount) {
+        dispatch({ type: "SET_AUTO_PLAY", payload: { isAuto: false, count: 0 } });
+        return;
+    }
+    
+    // Basic rapid-fire drop interval
+    const interval = setTimeout(() => {
+        handleDrop();
+        dispatch({ type: "DECREMENT_AUTO_BET" });
+    }, 250); // fast async drops
+    
+    return () => clearTimeout(interval);
+  }, [state.isAutoPlay, state.autoBetsLeft, handleDrop, state.balance, state.betAmount]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === "INPUT") return;
-      keyHistory.current = (keyHistory.current + e.key.toLowerCase()).slice(-12);
-      if (keyHistory.current.endsWith("open sesame")) { dispatch({ type: "TOGGLE_DUNGEON" }); keyHistory.current = ""; }
-      if (keyHistory.current.endsWith("makeitrain")) { dispatch({ type: "TOGGLE_RAIN" }); keyHistory.current = ""; }
-      if (e.key.toLowerCase() === "t") dispatch({ type: "TOGGLE_TILT" });
-      if (e.key.toLowerCase() === "g") dispatch({ type: "TOGGLE_DEBUG" });
-      if (state.status !== "IDLE") return;
+      if ((e.target as HTMLElement).tagName === "INPUT" || (e.target as HTMLElement).tagName === "SELECT") return;
       if (e.code === "ArrowLeft") { e.preventDefault(); dispatch({ type: "SET_COLUMN", payload: state.dropColumn - 1 }); }
       if (e.code === "ArrowRight") { e.preventDefault(); dispatch({ type: "SET_COLUMN", payload: state.dropColumn + 1 }); }
       if (e.code === "Space") { e.preventDefault(); handleDrop(); }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [state.status, state.dropColumn, handleDrop]);
-
-  const isIdle = state.status === "IDLE";
-  const statusLabel: Record<GameStatus, string> = {
-    IDLE: "Drop Ball", COMMITTING: "Committing…", STARTING: "Starting…", DROPPING: "Dropping…", REVEALING: "Revealing…"
-  };
+  }, [state.dropColumn, handleDrop]);
 
   return (
-    <main className="min-h-screen bg-[#070707] text-[#e0e0e0] p-4 lg:p-8 flex flex-col items-center">
-      {state.isRainMode && <RainOverlay />}
-      {state.isRainMode && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] bg-yellow-400 text-black px-6 py-2 rounded-full text-sm font-black shadow-lg shadow-yellow-500/30 animate-bounce">
-          💰 MAKE IT RAIN!
+    <main className="no-scroll-root font-sans relative overflow-hidden h-[100dvh] text-white flex flex-col" style={{ backgroundColor: 'var(--bg-dark)' }}>
+
+      {/* Fairness Popup Modal (native, Stake-style) */}
+      {state.isFairnessOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md animate-appear" onClick={() => dispatch({ type: "TOGGLE_FAIRNESS" })}>
+          <div className="w-full max-w-[480px] rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden border border-white/5" style={{ background: '#0F0F0F' }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-5 border-b border-white/5">
+              <div className="flex items-center gap-3">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-black shadow-inner" style={{ background: '#00E701', color: '#000' }}>F</div>
+                <span className="font-bold text-base tracking-tight">Fairness Verification</span>
+              </div>
+              <button onClick={() => dispatch({ type: "TOGGLE_FAIRNESS" })} className="w-8 h-8 rounded-lg flex items-center justify-center text-lg hover:bg-white/5 transition-colors text-[#B1BAD3]">x</button>
+            </div>
+            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-semibold" style={{ color: '#B1BAD3' }}>Client Seed</label>
+                <div className="flex rounded-lg border border-white/5 overflow-hidden" style={{ background: '#141414' }}>
+                  <input type="text" value={state.clientSeed} onChange={(e) => dispatch({ type: "SET_CLIENT_SEED", payload: e.target.value })} className="flex-1 bg-transparent px-4 py-3 text-sm text-white outline-none font-semibold" />
+                  <button 
+                    onClick={() => dispatch({ type: "SET_CLIENT_SEED", payload: Math.random().toString(36).substring(2, 10) })}
+                    className="px-6 text-[11px] font-black btn-glossy transition-all hover:brightness-125 uppercase tracking-wider" 
+                    style={{ background: '#3E5C76', color: '#FFFFFF', '--glossy-top': 'rgba(255,255,255,0.15)' } as any}
+                  >
+                    Change
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-semibold" style={{ color: '#B1BAD3' }}>Server Seed (Hashed)</label>
+                <div className="rounded border px-3 py-2.5" style={{ background: '#0F1923', borderColor: '#2F4553' }}>
+                  <span className="text-xs font-mono" style={{ color: '#557086' }}>Hidden until round is revealed</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-semibold" style={{ color: '#B1BAD3' }}>Nonce</label>
+                  <div className="rounded border px-3 py-2.5" style={{ background: '#0F1923', borderColor: '#2F4553' }}>
+                    <span className="text-sm font-semibold text-white">{state.recentWins.length}</span>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-semibold" style={{ color: '#B1BAD3' }}>Risk</label>
+                  <div className="rounded border px-3 py-2.5" style={{ background: '#0F1923', borderColor: '#2F4553' }}>
+                    <span className="text-sm font-semibold text-white">{state.risk}</span>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-semibold" style={{ color: '#B1BAD3' }}>Rows</label>
+                  <div className="rounded border px-3 py-2.5" style={{ background: '#0F1923', borderColor: '#2F4553' }}>
+                    <span className="text-sm font-semibold text-white">{state.rows}</span>
+                  </div>
+                </div>
+              </div>
+              <a 
+                href="/verify" 
+                target="_blank" 
+                className="block w-full text-center py-3.5 rounded-xl text-[11px] font-black tracking-wider uppercase transition-all btn-glossy hover:brightness-125" 
+                style={{ 
+                  background: '#3E5C76', 
+                  color: '#FFFFFF',
+                  '--glossy-top': 'rgba(255,255,255,0.15)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                } as any}
+              >
+                View Calculation Breakdown
+              </a>
+            </div>
+          </div>
         </div>
       )}
 
-      <div className="max-w-7xl w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-
+      <div className="flex-1 flex min-h-0 relative">
         {/* Sidebar */}
-        <aside className="lg:col-span-4 flex flex-col gap-6 order-2 lg:order-1">
-          <div className="p-8 rounded-[2rem] bg-white/[0.03] space-y-8 border border-white/5 shadow-2xl">
-
+        <aside className="w-[300px] h-full flex flex-col relative z-20 shrink-0 border-r border-white/5 shadow-[20px_0_50px_rgba(0,0,0,0.5)]" style={{ backgroundColor: 'var(--bg-panel)' }}>
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-4 flex flex-col gap-5">
+            
             {/* Balance */}
-            <div className="space-y-1">
-              <span className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold">Total Balance</span>
-              <div className="text-4xl font-black text-green-400 tabular-nums">
-                ${state.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
+            <div className="flex items-center justify-between py-2 px-3 rounded" style={{ background: '#0F1923' }}>
+              <span className="text-[11px] font-semibold" style={{ color: '#B1BAD3' }}>Balance</span>
+              <span className="text-sm font-bold text-white">${state.balance.toFixed(2)}</span>
             </div>
 
-            {/* Bet */}
-            <div className="space-y-3">
-              <label className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold">Bet Amount</label>
-              <div className="flex gap-2">
-                <button onClick={() => dispatch({ type: "SET_BET", payload: Math.floor(state.betAmount / 2) })} className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold transition-all border border-white/5">½</button>
-                <button onClick={() => dispatch({ type: "SET_BET", payload: state.betAmount * 2 })} className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold transition-all border border-white/5">2×</button>
-                <button onClick={() => dispatch({ type: "SET_BET", payload: state.balance })} className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-bold transition-all border border-white/5 uppercase">Max</button>
-              </div>
-              <div className="relative group">
-                <input type="number" value={state.betAmount} min={1} max={state.balance}
-                  onChange={(e) => dispatch({ type: "SET_BET", payload: Number(e.target.value) })}
-                  className="w-full bg-black/50 border border-white/10 rounded-2xl px-5 py-4 outline-none focus:border-green-500/50 text-xl font-bold transition-all"
-                />
-                <span className="absolute right-5 top-1/2 -translate-y-1/2 text-white/20 font-bold pointer-events-none">$</span>
-              </div>
-            </div>
-
-            {/* Column */}
-            <div className="space-y-3">
-              <label className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold">
-                Entry Column <span className="text-white/20 normal-case font-normal">(← →)</span>
-              </label>
-              <div className="grid grid-cols-7 gap-1">
-                {Array.from({ length: 13 }).map((_, i) => (
-                  <button key={i} onClick={() => dispatch({ type: "SET_COLUMN", payload: i })}
-                    aria-label={`Drop column ${i}`} aria-pressed={state.dropColumn === i}
-                    className={`h-8 rounded-lg text-[10px] font-bold transition-all border ${state.dropColumn === i ? "bg-green-500 border-green-400 text-black shadow-[0_0_12px_rgba(34,197,94,0.25)]" : "bg-white/5 border-white/5 text-white/40 hover:border-white/20"}`}
-                  >{i}</button>
-                ))}
-              </div>
-            </div>
-
-            {/* Drop */}
-            <div className="space-y-3">
-              <button onClick={handleDrop} disabled={!isIdle} aria-label="Drop ball (Space)"
-                className={`w-full py-6 rounded-2xl text-2xl font-black uppercase tracking-tighter italic transition-all shadow-2xl ${isIdle ? "bg-[#00f576] hover:bg-[#00ff7b] text-black shadow-green-500/20 active:scale-[0.98] cursor-pointer" : "bg-white/5 text-white/20 cursor-not-allowed"}`}
-              >
-                {statusLabel[state.status]}
+            {/* Manual | Auto */}
+            <div className="flex rounded-full p-1 shadow-inner" style={{ background: '#141414' }}>
+              <button 
+                onClick={() => dispatch({ type: "SET_AUTO_PLAY", payload: { isAuto: false, count: 0 } })}
+                className={`flex-1 py-2 text-xs font-bold rounded-full transition-all btn-glossy ${!state.isAutoPlay ? 'text-white' : 'hover:text-white'}`}
+                style={{ 
+                  backgroundColor: !state.isAutoPlay ? '#2F4553' : 'transparent',
+                  color: state.isAutoPlay ? '#B1BAD3' : undefined,
+                  '--glossy-top': !state.isAutoPlay ? 'rgba(255,255,255,0.1)' : 'transparent'
+                } as any}>
+                Manual
               </button>
-
-              {/* Commit hash — prominent + explained */}
-              {state.currentRound?.commitHex && (
-                <div className="bg-black/40 rounded-xl px-3 py-2 border border-white/[0.06]">
-                  <CommitTooltip commitHex={state.currentRound.commitHex} />
-                </div>
-              )}
-
-              {errorMsg && (
-                <p className="text-xs text-red-400 text-center bg-red-500/10 rounded-xl px-3 py-2 border border-red-500/20">⚠ {errorMsg}</p>
-              )}
+              <button 
+                onClick={() => dispatch({ type: "SET_AUTO_PLAY", payload: { isAuto: true, count: 0 } })}
+                className={`flex-1 py-2 text-xs font-bold rounded-full transition-all btn-glossy ${state.isAutoPlay ? 'text-white' : 'hover:text-white'}`}
+                style={{ 
+                  backgroundColor: state.isAutoPlay ? '#2F4553' : 'transparent',
+                  color: !state.isAutoPlay ? '#B1BAD3' : undefined,
+                  '--glossy-top': state.isAutoPlay ? 'rgba(255,255,255,0.1)' : 'transparent'
+                } as any}>
+                Auto
+              </button>
             </div>
 
-            {/* Controls row */}
-            <div className="flex items-center gap-2 pt-4 border-t border-white/5">
-              <button onClick={() => dispatch({ type: "TOGGLE_MUTE" })} title={state.isMuted ? "Unmute" : "Mute"}
-                className={`p-3 bg-white/5 rounded-xl transition-colors ${state.isMuted ? "text-red-500" : "text-white/40 hover:text-white"}`}>
-                {state.isMuted ? "🔇" : "🔊"}
-              </button>
-              <button onClick={() => dispatch({ type: "TOGGLE_REDUCED_MOTION" })} title="Toggle reduced motion"
-                className={`p-3 bg-white/5 rounded-xl transition-colors ${state.reducedMotion ? "text-blue-500" : "text-white/40 hover:text-white"}`}>
-                {state.reducedMotion ? "🏃" : "⚡"}
-              </button>
-              <div className="flex-1 flex flex-col items-end gap-0.5">
-                <span className="text-[9px] text-white/20 uppercase tracking-widest font-bold">Client Seed</span>
-                <input type="text" value={state.clientSeed}
-                  onChange={(e) => dispatch({ type: "SET_CLIENT_SEED", payload: e.target.value })}
-                  aria-label="Client seed"
-                  className="bg-transparent text-[11px] text-white/60 text-right outline-none focus:text-white font-mono border-b border-white/10 focus:border-white/30 pb-1 w-full" />
-              </div>
-            </div>
-
-            {/* Paytable */}
-            <div className="pt-2 border-t border-white/5">
-              <span className="text-[9px] text-white/20 uppercase tracking-widest font-bold block mb-2">Paytable</span>
-              <div className="flex gap-0.5">
-                {payoutTable.map((mult, i) => (
-                  <div key={i} className="flex-1 text-center py-1.5 rounded text-[8px] font-black"
-                    style={{ backgroundColor: `${binColors[i]}30`, color: binColors[i] }}>
-                    {mult}x
+            {/* Bet Amount */}
+            <div className="flex flex-col gap-1.5">
+               <span className="text-[11px] font-semibold" style={{ color: '#B1BAD3' }}>Bet Amount</span>
+               <div className="flex rounded overflow-hidden border focus-within:border-[#557086] transition-colors" style={{ borderColor: '#2F4553', background: '#0F1923' }}>
+                  <div className="flex-1 flex items-center px-3">
+                    <span className="font-semibold text-sm mr-1" style={{ color: '#557086' }}>$</span>
+                    <input type="number" value={state.betAmount} min={1} max={state.balance}
+                      onChange={(e) => dispatch({ type: "SET_BET", payload: Number(e.target.value) })}
+                      className="w-full bg-transparent py-2 outline-none font-semibold text-sm text-white"
+                    />
                   </div>
-                ))}
-              </div>
+                  <button onClick={() => dispatch({ type: "SET_BET", payload: Math.max(1, Math.floor(state.betAmount * 0.5)) })}
+                      className="px-3 py-2 text-xs font-bold text-white transition-all border-l border-black/20 btn-glossy" style={{ background: '#2F4553', '--glossy-top': 'rgba(255,255,255,0.1)' } as any}>
+                      1/2
+                  </button>
+                  <button onClick={() => dispatch({ type: "SET_BET", payload: Math.min(state.balance, Math.floor(state.betAmount * 2)) })}
+                      className="px-3 py-2 text-xs font-bold text-white transition-all border-l border-black/20 btn-glossy" style={{ background: '#2F4553', '--glossy-top': 'rgba(255,255,255,0.1)' } as any}>
+                      2x
+                  </button>
+                  <button onClick={() => dispatch({ type: "SET_BET", payload: state.balance })}
+                      className="px-3 py-2 text-xs font-bold text-white transition-all border-l border-black/20 btn-glossy" style={{ background: '#2F4553', '--glossy-top': 'rgba(255,255,255,0.1)' } as any}>
+                      Max
+                  </button>
+               </div>
             </div>
+
+            {/* Risk */}
+            <div className="flex flex-col gap-1.5">
+               <span className="text-[11px] font-semibold" style={{ color: '#B1BAD3' }}>Risk</span>
+               <select 
+                 value={state.risk}
+                 onChange={(e) => dispatch({ type: "SET_RISK", payload: e.target.value as 'LOW'|'MEDIUM'|'HIGH' })}
+                 className="w-full rounded px-3 py-2 outline-none font-semibold text-sm text-white appearance-none cursor-pointer border transition-colors focus:border-[#557086]"
+                 style={{ background: '#0F1923', borderColor: '#2F4553' }}
+               >
+                 <option value="LOW" style={{ background: '#0F1923' }}>Low</option>
+                 <option value="MEDIUM" style={{ background: '#0F1923' }}>Medium</option>
+                 <option value="HIGH" style={{ background: '#0F1923' }}>High</option>
+               </select>
+            </div>
+
+            {/* Rows */}
+            <div className="flex flex-col gap-1.5">
+               <span className="text-[11px] font-semibold" style={{ color: '#B1BAD3' }}>Rows</span>
+               <select 
+                 value={state.rows}
+                 onChange={(e) => dispatch({ type: "SET_ROWS", payload: Number(e.target.value) })}
+                 className="w-full rounded px-3 py-2 outline-none font-semibold text-sm text-white appearance-none cursor-pointer border transition-colors focus:border-[#557086]"
+                 style={{ background: '#0F1923', borderColor: '#2F4553' }}
+               >
+                 <option value={8} style={{ background: '#0F1923' }}>8</option>
+                 <option value={12} style={{ background: '#0F1923' }}>12</option>
+                 <option value={16} style={{ background: '#0F1923' }}>16</option>
+               </select>
+            </div>
+
+            {/* Auto Bet Count */}
+            {state.isAutoPlay && (
+              <div className="flex flex-col gap-1.5">
+                 <span className="text-[11px] font-semibold" style={{ color: '#B1BAD3' }}>Number of Bets</span>
+                 <input type="number" value={state.autoBetsLeft || ''} min={1} max={100}
+                   placeholder="10"
+                   onChange={(e) => dispatch({ type: "SET_AUTO_PLAY", payload: { isAuto: true, count: Number(e.target.value) } })}
+                   className="w-full rounded px-3 py-2 outline-none font-semibold text-sm text-white border transition-colors focus:border-[#557086]"
+                   style={{ background: '#0F1923', borderColor: '#2F4553' }}
+                 />
+              </div>
+            )}
+
+            <div className="flex-1" />
+
+            {/* Bet Button */}
+            <button onClick={() => {
+              if (state.isAutoPlay) {
+                 if (state.autoBetsLeft > 0) {
+                    dispatch({ type: "SET_AUTO_PLAY", payload: { isAuto: true, count: 0 } });
+                 } else {
+                    dispatch({ type: "SET_AUTO_PLAY", payload: { isAuto: true, count: 10 } });
+                 }
+              } else {
+                 handleDrop();
+              }
+            }}
+              disabled={state.balance < state.betAmount}
+              className={`w-full py-4 rounded-xl text-base font-black transition-all btn-glossy shadow-[0_4px_15px_rgba(0,230,1,0.2)] ${state.balance < state.betAmount ? "opacity-30 cursor-not-allowed" : "hover:scale-[1.02] active:scale-[0.98]"}`}
+              style={{ backgroundColor: 'var(--accent-green)', color: '#000', '--glossy-top': 'var(--accent-green-glosstop)' } as any}
+            >
+              {state.isAutoPlay ? (state.autoBetsLeft > 0 ? "STOP AUTOBET" : "START AUTOBET") : "BET"}
+            </button>
           </div>
-
-          {/* Last result */}
-          {state.lastResult && (
-            <div className={`p-6 rounded-3xl border flex items-center justify-between ${state.lastResult.isWin ? "bg-green-500/10 border-green-500/20" : "bg-red-500/10 border-red-500/20"}`}>
-              <div className="space-y-0.5">
-                <span className={`text-[10px] uppercase font-bold ${state.lastResult.isWin ? "text-green-500/60" : "text-red-500/60"}`}>{state.lastResult.isWin ? "Won" : "Lost"}</span>
-                <div className={`text-2xl font-black ${state.lastResult.isWin ? "text-green-500" : "text-red-400"}`}>
-                  {state.lastResult.isWin ? "+" : ""}${state.lastResult.amount.toFixed(2)}
-                </div>
-              </div>
-              <div className={`text-sm font-black px-3 py-1 rounded-full ${state.lastResult.isWin ? "bg-green-500 text-black" : "bg-red-500 text-white"}`}>
-                {state.lastResult.multiplier}x
-              </div>
-            </div>
-          )}
-
-          {/* Easter egg hint */}
-          <p className="text-[9px] text-white/10 text-center font-mono tracking-wide">
-            T · G · &quot;open sesame&quot; · &quot;makeitrain&quot;
-          </p>
         </aside>
 
-        {/* Board */}
-        <section className="lg:col-span-8 order-1 lg:order-2 flex flex-col gap-8">
-          <div className={`relative transition-all duration-700 ${state.isTilt ? "crt-filter animate-tilt" : ""}`}>
-            {state.isTilt && (
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] pointer-events-none select-none">
-                <span className="text-8xl font-black italic text-red-600 tracking-tighter uppercase opacity-60">TILT!</span>
-              </div>
-            )}
-            {state.isDungeon && (
-              <div className="absolute top-4 right-4 z-[100] bg-orange-600 text-black px-4 py-1 rounded-full text-xs font-black animate-pulse">
-                🔥 Dungeon Mode
-              </div>
-            )}
-            {isGoldenNext.current && isIdle && (
-              <div style={{ left: `calc(${((state.dropColumn - 6) * (100 / 18)) + 50}%)` }}
-                className="absolute -top-10 transition-all duration-300 pointer-events-none" aria-hidden="true">
-                <span className="text-3xl">👑</span>
-              </div>
-            )}
-            <PlinkoBoard
-              path={state.currentRound?.path || []}
-              pegMap={state.currentRound?.pegMap || []}
-              dropColumn={state.dropColumn}
-              binIndex={state.currentRound?.binIndex ?? 0}
-              isDropping={state.status === "DROPPING"}
-              reducedMotion={state.reducedMotion}
-              isGolden={isGoldenNext.current}
-              isDungeon={state.isDungeon}
-              isDebug={state.isDebug}
-              onPegHit={pegTick}
-              onAnimationComplete={onAnimationComplete}
-            />
-          </div>
+        {/* Board Arena */}
+        <section className="flex-1 flex flex-col relative z-10 w-full min-w-0" style={{ backgroundColor: 'var(--bg-dark)' }}>
+          <div className="flex-1 flex items-center justify-center p-4 relative w-full h-full">
+             
+             {/* Win Feed */}
+             <div className="absolute top-6 right-6 flex flex-col gap-2 z-50 pointer-events-none">
+                 {state.recentWins.slice(0, 3).map((win, i) => (
+                    <div key={`${win.id}-${i}`} className="px-4 py-2 rounded-xl flex items-center gap-4 animate-appear shadow-2xl border border-white/5" style={{ background: '#1A1A1A' }}>
+                        <span className={`text-sm font-black ${win.isWin ? "text-[#00E701]" : "text-[#B1BAD3]"}`}>
+                            {win.isWin ? "+" : "-"}${win.amount.toFixed(2)}
+                        </span>
+                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black btn-glossy ${win.isWin ? 'text-black' : 'text-white'}`} 
+                              style={{ 
+                                background: win.isWin ? '#00E701' : '#3F5563',
+                                '--glossy-top': win.isWin ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)'
+                              } as any}>
+                            {win.multiplier}x
+                        </span>
+                    </div>
+                 ))}
+             </div>
 
-          {/* Recent results */}
-          <div className="flex items-center justify-center gap-4 bg-white/[0.02] px-8 py-5 rounded-full border border-white/5 self-center">
-            <span className="text-[10px] uppercase tracking-widest text-white/20 font-bold">Recent</span>
-            <div className="flex gap-3">
-              {state.recentBins.length === 0
-                ? <span className="text-xs text-white/10 italic">No drops yet</span>
-                : state.recentBins.map((bin, i) => (
-                  <div key={i} className="w-10 h-10 rounded-full flex items-center justify-center text-[10px] font-black border"
-                    style={{ backgroundColor: `${binColors[bin]}22`, color: binColors[bin], borderColor: `${binColors[bin]}44` }}>
-                    {payoutTable[bin]}x
-                  </div>
-                ))}
-            </div>
-          </div>
-
-          <div className="text-center">
-            <a href="/verify" className="text-[11px] text-white/50 hover:text-yellow-400 transition-colors underline underline-offset-4 font-mono">
-              🔍 Independently audit any round →
-            </a>
+             <div className="relative w-full max-w-[800px] h-full flex flex-col justify-center">
+                <div className="w-full relative aspect-square max-h-full">
+                  <PlinkoBoard
+                    activeBalls={state.activeBalls}
+                    rows={state.rows}
+                    risk={state.risk}
+                    reducedMotion={state.reducedMotion}
+                    onPegHit={pegTick}
+                    onAnimationComplete={onAnimationComplete}
+                  />
+                </div>
+             </div>
           </div>
         </section>
       </div>
 
-      <footer className="mt-12 text-[10px] font-bold text-white/20 uppercase tracking-[0.4em]">
-        Plinko Lab · Provably Fair · Space to drop
+      {/* Footer */}
+      <footer className="h-12 shrink-0 flex items-center justify-between px-6 border-t border-white/5 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]" style={{ backgroundColor: 'var(--bg-panel)' }}>
+          <div className="flex items-center gap-3">
+            <button onClick={() => dispatch({ type: "TOGGLE_MUTE" })} className="px-3 py-1.5 rounded-lg text-[10px] font-black btn-glossy transition-all" style={{ color: state.isMuted ? '#f43f5e' : '#B1BAD3', background: '#1A1A1A', '--glossy-top': 'rgba(255,255,255,0.05)' } as any}>
+              {state.isMuted ? "MUTED" : "SOUND"}
+            </button>
+            <button onClick={() => dispatch({ type: "TOGGLE_REDUCED_MOTION" })} className="px-3 py-1.5 rounded-lg text-[10px] font-black btn-glossy transition-all" style={{ color: state.reducedMotion ? '#00E701' : '#B1BAD3', background: '#1A1A1A', '--glossy-top': 'rgba(255,255,255,0.05)' } as any}>
+              {state.reducedMotion ? "TURBO" : "NORMAL"}
+            </button>
+          </div>
+          <span className="font-black text-xs text-white/20 tracking-widest uppercase">Plinko Lab Pro</span>
+          <button 
+            onClick={() => dispatch({ type: "TOGGLE_FAIRNESS" })} 
+            className="group flex items-center gap-2 px-4 py-1.5 rounded-lg text-[11px] font-black btn-glossy transition-all hover:brightness-125 active:scale-95" 
+            style={{ 
+              background: '#213743', 
+              color: '#B1BAD3', 
+              '--glossy-top': 'rgba(255,255,255,0.12)',
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1)'
+            } as any}
+          >
+             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="opacity-70 group-hover:opacity-100 transition-opacity">
+               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+             </svg>
+             <span className="tracking-[0.05em]">FAIRNESS</span>
+          </button>
       </footer>
     </main>
   );
