@@ -31,3 +31,5 @@ export default function RootLayout({
     </html>
   );
 }
+
+// PLINKO LAB PRO: STABILIZED
