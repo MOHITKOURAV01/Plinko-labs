@@ -1,8 +1,4 @@
-import fs from 'fs';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
-
-const STORAGE_PATH = path.join(process.cwd(), 'rounds.json');
+import { prisma } from './prisma';
 
 export interface Round {
   id: string;
@@ -24,80 +20,57 @@ export interface Round {
   revealedAt: Date | null;
 }
 
-const ensureFileAndRead = (): Round[] => {
-  try {
-    if (!fs.existsSync(STORAGE_PATH)) {
-      fs.writeFileSync(STORAGE_PATH, JSON.stringify([]));
-      return [];
-    }
-    const data = fs.readFileSync(STORAGE_PATH, 'utf-8');
-    if (!data || data.trim() === '') {
-       fs.writeFileSync(STORAGE_PATH, JSON.stringify([]));
-       return [];
-    }
-    return JSON.parse(data) as Round[];
-  } catch (e) {
-    console.error('[STORAGE_ERROR] Corrupted JSON, resetting...', e);
-    fs.writeFileSync(STORAGE_PATH, JSON.stringify([]));
-    return [];
-  }
-};
-
-const writeStorage = (rounds: Round[]) => {
-  try {
-    fs.writeFileSync(STORAGE_PATH, JSON.stringify(rounds, null, 2));
-  } catch (e) {
-    console.error('[STORAGE_WRITE_ERROR]', e);
-  }
-};
-
 export const RoundRepository = {
   async getAll(limit = 10): Promise<Round[]> {
-    const rounds = ensureFileAndRead();
-    return rounds.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, limit);
+    const rounds = await prisma.round.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+    return rounds as any as Round[];
   },
 
   async getById(id: string): Promise<Round | null> {
-    const rounds = ensureFileAndRead();
-    return rounds.find(r => r.id === id) || null;
+    const round = await prisma.round.findUnique({
+      where: { id },
+    });
+    return (round as any as Round) || null;
   },
 
   async create(data: Partial<Round>): Promise<Round> {
-    const rounds = ensureFileAndRead();
-    
-    const newRound: Round = {
-      id: uuidv4(),
-      createdAt: new Date(),
-      status: 'CREATED',
-      nonce: '',
-      commitHex: '',
-      serverSeed: null,
-      clientSeed: '',
-      combinedSeed: '',
-      pegMapHash: '',
-      rows: 12,
-      risk: 'MEDIUM',
-      dropColumn: 6,
-      binIndex: 0,
-      payoutMultiplier: 1.0,
-      betCents: 100,
-      pathJson: [],
-      revealedAt: null,
-      ...data,
-    };
-
-    rounds.push(newRound);
-    writeStorage(rounds);
-    return newRound;
+    const round = await prisma.round.create({
+      data: {
+        status: data.status || 'CREATED',
+        nonce: data.nonce || '',
+        commitHex: data.commitHex || '',
+        serverSeed: data.serverSeed || null,
+        clientSeed: data.clientSeed || '',
+        combinedSeed: data.combinedSeed || '',
+        pegMapHash: data.pegMapHash || '',
+        rows: data.rows || 12,
+        risk: data.risk || 'MEDIUM',
+        dropColumn: data.dropColumn || 6,
+        binIndex: data.binIndex || 0,
+        payoutMultiplier: data.payoutMultiplier || 1.0,
+        betCents: data.betCents || 100,
+        pathJson: data.pathJson ? JSON.stringify(data.pathJson) : '[]',
+        revealedAt: data.revealedAt || null,
+      },
+    });
+    return round as any as Round;
   },
 
   async update(id: string, data: Partial<Round>): Promise<Round | null> {
-    const rounds = ensureFileAndRead();
-    const idx = rounds.findIndex(r => r.id === id);
-    if (idx === -1) return null;
+    const updateData: any = { ...data };
+    
+    // Ensure pathJson is stringified if it's being updated
+    if (data.pathJson !== undefined) {
+      updateData.pathJson = JSON.stringify(data.pathJson);
+    }
 
-    rounds[idx] = { ...rounds[idx], ...data };
-    writeStorage(rounds);
-    return rounds[idx];
+    const round = await prisma.round.update({
+      where: { id },
+      data: updateData,
+    });
+    return round as any as Round;
   }
 };
