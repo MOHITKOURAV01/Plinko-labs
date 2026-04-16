@@ -1,15 +1,15 @@
-# 🧪 Plinko Lab Pro (Provably-Fair)
+#  Plinko Lab Pro (Provably-Fair)
 
 A high-fidelity, provably-fair Plinko implementation built as a take-home engineering assignment for **Daphnis Labs**.
 
-## 🚀 Live Links
+##  Live Links
 - **Application**: [plinko-lab-pro.vercel.app](https://plinko-labs-xi.vercel.app/) 
 - **Verifier Page**: [/verify](https://plinko-labs-xi.vercel.app/verify)
 - **Example Round**: [Audit Report](https://plinko-labs-xi.vercel.app/verify)
 
 ---
 
-## 🛠 Tech Stack
+##  Tech Stack
 - **Frontend**: Next.js 15 (App Router), React 19, TypeScript
 - **Styling**: Vanilla CSS (Premium OLED Black Theme)
 - **Physics**: Custom Deterministic Canvas Engine (60 FPS)
@@ -19,7 +19,7 @@ A high-fidelity, provably-fair Plinko implementation built as a take-home engine
 
 ---
 
-## ⚖️ Provably-Fair Protocol
+##  Provably-Fair Protocol
 
 Our implementation follows a strict **Commit-Reveal** protocol to ensure 100% transparency and zero server-side manipulation.
 
@@ -54,7 +54,7 @@ If `rand() < bias'`, the ball moves **Left**, else **Right**.
 
 ---
 
-## 🕹 Features & Easter Eggs
+## Features & Easter Eggs
 
 - **OLED Dark Mode**: Optimized for high-contrast laboratory environments.
 - **Sound System**: Subtle peg ticks and celebratory landing SFX (Mute Toggle included).
@@ -67,7 +67,7 @@ If `rand() < bias'`, the ball moves **Left**, else **Right**.
 
 ---
 
-## 🤖 AI Usage & Documentation
+## AI Usage & Documentation
 
 This project was developed with the assistance of **Antigravity (Google Deepmind)**.
 
@@ -82,7 +82,7 @@ This project was developed with the assistance of **Antigravity (Google Deepmind
 
 ---
 
-## ⏱ Time Log
+## Time Log
 
 | Task | Duration |
 | :--- | :--- |
@@ -95,7 +95,7 @@ This project was developed with the assistance of **Antigravity (Google Deepmind
 
 ---
 
-## 🔧 Local Setup
+## Local Setup
 
 1.  **Install dependencies**:
     ```bash
