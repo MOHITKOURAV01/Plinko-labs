@@ -1,17 +1,4 @@
-ignoredBuiltDependencies:
-  - sharp
-  - unrs-resolver
+packages: []
 onlyBuiltDependencies:
-  - /
-  - '@'
   - '@prisma/engines'
-  - a
-  - e
-  - g
-  - i
-  - m
-  - n
-  - p
   - prisma
-  - r
-  - s
