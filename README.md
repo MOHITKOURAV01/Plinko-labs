@@ -3,9 +3,9 @@
 A high-fidelity, provably-fair Plinko implementation built as a take-home engineering assignment for **Daphnis Labs**.
 
 ## 🚀 Live Links
-- **Application**: [plinko-lab-pro.vercel.app](http://localhost:3000) (Local Development)
-- **Verifier Page**: [/verify](http://localhost:3000/verify)
-- **Example Round**: [Audit Report](http://localhost:3000/verify?id=example)
+- **Application**: [plinko-lab-pro.vercel.app](https://plinko-labs-xi.vercel.app/) 
+- **Verifier Page**: [/verify](https://plinko-labs-xi.vercel.app/verify)
+- **Example Round**: [Audit Report](https://plinko-labs-xi.vercel.app/verify)
 
 ---
 
