@@ -34,6 +34,8 @@ const SPEC_VECTORS = {
   clientSeed: "candidate-hello",
   nonce: "42",
   dropColumn: "6",
+  rows: "12",
+  risk: "MEDIUM",
   roundId: "",
 };
 
@@ -279,6 +281,7 @@ export default function VerifierPage() {
     serverSeed: "",
     clientSeed: "",
     nonce: "",
+    dropColumn: "6",
     rows: "12",
     risk: "MEDIUM",
     roundId: "",

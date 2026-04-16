@@ -14,7 +14,7 @@ const startSchema = z.object({
 
 import { PAYOUTS } from "@/lib/constants";
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const body = await req.json();
